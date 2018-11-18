@@ -27,6 +27,8 @@ class Solver(QObject):
         gui = self.gui
         game = gui.game
         gui.aboutToQuit.connect(self.quit)
+        losses = 0
+        expected_losses = 0
 
         while True:
             state = game.state
@@ -35,6 +37,11 @@ class Solver(QObject):
                 t = time()
                 prob = solve(state, game.num_mines)
                 print('step - {:.5}s'.format(time() - t))
+                # Flag mines.
+                ys, xs = ((prob == 1) & (state != "flag")).nonzero()
+                for x, y in zip(xs, ys):
+                    game.flag(x, y)
+                    gui.square_value_changed.emit(x, y, "flag")
                 # Set the squares that were already opened to np.inf, so we can find the minimum of the unopened squares.
                 search_mask = np.array([[isinstance(state[y][x], int) for x in range(len(state[0]))] for y in range(len(state))])
                 prob[search_mask] = np.inf
@@ -44,6 +51,7 @@ class Solver(QObject):
                     idx = randrange(len(xs))
                     x, y = xs[idx], ys[idx]
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
+                    expected_losses += best_prob
                     done, opened = game.select(x, y)
                 else:
                     print('KNOW ({} squares)'.format(len(xs)))
@@ -55,9 +63,14 @@ class Solver(QObject):
                     gui.square_value_changed.emit(square.x, square.y, str(square.value))
                 gui.move_ended.emit()
                 if done:
-                    print('WON' if game.is_won() else 'LOST')
+                    if game.is_won():
+                        print('WON')
+                    else:
+                        print('LOST')
+                        losses += 1
                     gui.mine_counter_changed.emit(0)
                     gui.reset_value_changed.emit('won' if game.is_won() else 'lost')
+                    print('L = {}, E = {}'.format(losses, expected_losses))
                 # Verify that if p was 0 the game can't have been lost.
                 if best_prob == 0 and game.done and not game.is_won():
                     raise Exception('ERROR')
