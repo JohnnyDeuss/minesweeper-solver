@@ -26,16 +26,15 @@ class Solver(QObject):
     def run(self):
         gui = self.gui
         game = gui.game
-        state = game.state
         gui.aboutToQuit.connect(self.quit)
 
         while True:
-
+            state = game.state
             done = False
             while not done and not self.quitting:
                 t = time()
                 prob = solve(state, game.num_mines)
-                print('step - {.5}s', time() - t)
+                print('step - {:.5}s'.format(time() - t))
                 # Set the squares that were already opened to np.inf, so we can find the minimum of the unopened squares.
                 search_mask = np.array([[isinstance(state[y][x], int) for x in range(len(state[0]))] for y in range(len(state))])
                 prob[search_mask] = np.inf
@@ -61,12 +60,13 @@ class Solver(QObject):
                     gui.reset_value_changed.emit('won' if game.is_won() else 'lost')
                 # Verify that if p was 0 the game can't have been lost.
                 if best_prob == 0 and game.done and not game.is_won():
-                    print('ERROR')
+                    raise Exception('ERROR')
                 sleep(1)
             sleep(5)
             game.reset()
             gui.game_reset.emit()
             gui.reset_value_changed.emit('None')
+            print(game.state)
 
 
 if __name__ == '__main__':
