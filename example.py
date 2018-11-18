@@ -10,7 +10,7 @@ import numpy as np
 
 from minesweeper import Minesweeper
 from minesweeper.gui import MinesweeperGUI
-from minesweeper_solver import solve
+from solver import solve
 
 
 class Solver(QObject):
@@ -28,15 +28,14 @@ class Solver(QObject):
         game = gui.game
         state = game.state
         gui.aboutToQuit.connect(self.quit)
-        
+
         while True:
 
             done = False
             while not done and not self.quitting:
-                print('step')
                 t = time()
                 prob = solve(state, game.num_mines)
-                print('solved', time() - t)
+                print('step - {.5}s', time() - t)
                 # Set the squares that were already opened to np.inf, so we can find the minimum of the unopened squares.
                 search_mask = np.array([[isinstance(state[y][x], int) for x in range(len(state[0]))] for y in range(len(state))])
                 prob[search_mask] = np.inf
@@ -45,8 +44,10 @@ class Solver(QObject):
                 if best_prob != 0:
                     idx = randrange(len(xs))
                     x, y = xs[idx], ys[idx]
+                    print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     done, opened = game.select(x, y)
                 else:
+                    print('KNOW ({} squares)'.format(len(xs)))
                     opened = []
                     for x, y in zip(xs, ys):
                         done, opened_sfx = game.select(x, y)
@@ -55,13 +56,17 @@ class Solver(QObject):
                     gui.square_value_changed.emit(square.x, square.y, str(square.value))
                 gui.move_ended.emit()
                 if done:
+                    print('WON' if game.is_won() else 'LOST')
                     gui.mine_counter_changed.emit(0)
                     gui.reset_value_changed.emit('won' if game.is_won() else 'lost')
                 # Verify that if p was 0 the game can't have been lost.
                 if best_prob == 0 and game.done and not game.is_won():
                     print('ERROR')
                 sleep(1)
+            sleep(5)
+            game.reset()
             gui.game_reset.emit()
+            gui.reset_value_changed.emit('None')
 
 
 if __name__ == '__main__':
