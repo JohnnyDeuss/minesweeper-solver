@@ -8,12 +8,11 @@ from random import randrange
 from PyQt5.QtCore import pyqtSlot, QObject
 import numpy as np
 
-from minesweeper import Minesweeper
 from minesweeper.gui import MinesweeperGUI
-from solver import solve
+from solver import Solver
 
 
-class Solver(QObject):
+class Example(QObject):
     def __init__(self, gui):
         super().__init__()
         self.gui = gui
@@ -31,32 +30,26 @@ class Solver(QObject):
         expected_losses = 0
 
         while True:
+            solver = Solver(game.width, game.height, game.num_mines)
             state = game.state
             done = False
             while not done and not self.quitting:
+                # Time how long a step takes to compute.
                 t = time()
-                prob = solve(state, game.num_mines)
-                prob_copy = prob.copy()
+                prob = solver.solve(state)
                 print('step - {:.5}s'.format(time() - t))
-                # Flag mines.
-                ys, xs = ((prob == 1) & (state != "flag")).nonzero()
-                for x, y in zip(xs, ys):
+                # Flag newly found mines.
+                for y, x in zip(*((prob == 1) & (state != "flag")).nonzero()):
                     game.flag(x, y)
                     gui.square_value_changed.emit(x, y, "flag")
                 # Set the squares that were already opened to np.inf, so we can find the minimum of the unopened squares.
                 search_mask = np.array([[isinstance(state[y][x], int) for x in range(len(state[0]))] for y in range(len(state))])
                 prob[search_mask] = np.inf
-                best_prob = prob.min()
+                best_prob = np.nanmin(prob)
                 ys, xs = (prob == best_prob).nonzero()
                 if best_prob != 0:
-                    try:
-                        idx = randrange(len(xs))
-                    except ValueError as e:
-                        print(e)
-                        print(prob)
-                        print(prob_copy)
-                        print('FU')
-                        raise
+                    # Pick a random  action from the best guesses.
+                    idx = randrange(len(xs))
                     x, y = xs[idx], ys[idx]
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     expected_losses += best_prob
@@ -64,6 +57,7 @@ class Solver(QObject):
                 else:
                     print('KNOW ({} squares)'.format(len(xs)))
                     opened = []
+                    # Open all the knowns.
                     for x, y in zip(xs, ys):
                         done, opened_sfx = game.select(x, y)
                         opened += opened_sfx
@@ -83,7 +77,7 @@ class Solver(QObject):
                 if best_prob == 0 and game.done and not game.is_won():
                     raise Exception('ERROR')
                 sleep(1)
-            sleep(5)
+            sleep(3.5)
             game.reset()
             gui.game_reset.emit()
             gui.reset_value_changed.emit('None')
@@ -91,7 +85,7 @@ class Solver(QObject):
 
 if __name__ == '__main__':
     gui = MinesweeperGUI()
-    solver = Solver(gui)
-    solver_thread = Thread(target=solver.run)
-    solver_thread.start()
+    example = Example(gui)
+    example_thread = Thread(target=example.run)
+    example_thread.start()
     gui.exec()
