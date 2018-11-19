@@ -29,19 +29,17 @@ class Example(QObject):
         losses = 0
         expected_losses = 0
 
-        while True:
+        while not self.quitting:
             solver = Solver(game.width, game.height, game.num_mines)
             state = game.state
-            done = False
-            while not done and not self.quitting:
+            while not game.done and not self.quitting:
                 # Time how long a step takes to compute.
                 t = time()
                 prob = solver.solve(state)
                 print('step - {:.5}s'.format(time() - t))
                 # Flag newly found mines.
                 for y, x in zip(*((prob == 1) & (state != "flag")).nonzero()):
-                    game.flag(x, y)
-                    gui.square_value_changed.emit(x, y, "flag")
+                    gui.right_click_action(x, y)
                 # Set the squares that were already opened to np.inf, so we can find the minimum of the unopened squares.
                 search_mask = np.array([[isinstance(state[y][x], int) for x in range(len(state[0]))] for y in range(len(state))])
                 prob[search_mask] = np.inf
@@ -53,34 +51,18 @@ class Example(QObject):
                     x, y = xs[idx], ys[idx]
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     expected_losses += best_prob
-                    done, opened = game.select(x, y)
+                    gui.left_click_action(x, y)
                 else:
                     print('KNOW ({} squares)'.format(len(xs)))
-                    opened = []
                     # Open all the knowns.
                     for x, y in zip(xs, ys):
-                        done, opened_sfx = game.select(x, y)
-                        opened += opened_sfx
-                for square in opened:
-                    gui.square_value_changed.emit(square.x, square.y, str(square.value))
-                gui.move_ended.emit()
-                if done:
-                    if game.is_won():
-                        print('WON')
-                    else:
-                        print('LOST')
-                        losses += 1
-                    gui.mine_counter_changed.emit(0)
-                    gui.reset_value_changed.emit('won' if game.is_won() else 'lost')
-                    print('L = {}, E = {}'.format(losses, expected_losses))
-                # Verify that if p was 0 the game can't have been lost.
-                if best_prob == 0 and game.done and not game.is_won():
-                    raise Exception('ERROR')
+                        gui.left_click_action(x, y)
+                print('L = {}, E = {}'.format(losses, expected_losses))
                 sleep(1)
-            sleep(3.5)
-            game.reset()
-            gui.game_reset.emit()
-            gui.reset_value_changed.emit('None')
+            if not game.is_won():
+                losses += 1
+            sleep(2.5)
+            gui.reset()
 
 
 if __name__ == '__main__':
