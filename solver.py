@@ -59,57 +59,29 @@ class Solver:
         if not np.isnan(state).all():
             # Expand the known state with new information from the passed state.
             self._known[~np.isnan(state)] = 0     # All squares that are not np.nan are opened and known.
-            # Reduce the numbers and heck if there are any trivial solutions, where we have a 0 with neighbors or square
-            # with the number N with N unflagged neighbors.
+            # Reduce the numbers and check if there are any trivial solutions, where we have a 0 with neighbors or
+            # square with the number N with N unflagged neighbors.
             prob, state = self._counting_step(state)
             # Stop early if the early stopping flag is set and we've found a safe square to open?
             if self._stop_on_solution and ~np.isnan(prob).all():
                 return prob
+
             # Compute all possible solutions of the boundary.
             solutions = self._cp_step(state)
             solution_mask = ~np.isnan(solutions[0])
             # Now mark known squares, because they appear in every possible solution of the boundary.
             certain_mask = solution_mask & np.array([solutions[0] == solutions[i] for i in range(len(solutions))]).all(axis=0)
             prob[certain_mask] = solutions[0][certain_mask]
+            # Simplify the solutions by dropping the certain squares from all solutions.
+            solutions = [np.where(certain_mask, np.nan, solution) for solution in solutions]
             # Also update the known array that we're keeping with these values.
             self._known[certain_mask] = solutions[0][certain_mask].astype(float)
             # Stop early if the early stopping flag is set and we've found a safe square to open?
             if self._stop_on_solution and ~np.isnan(prob).all():
                 return prob
-            # Compute the number of known mines.
-            # That leaves us with a couple of squares on the boundary that we're uncertain of.
-            solution_mask = solution_mask & ~certain_mask
-            # Now comes the most difficult part; each solution is *not* equally likely! We need to calculate the
-            # relative weight of each solution, which is proportional to the number of models that satisfy the given
-            # solution.
-            unconstrained_squares = np.isnan(state) & ~solution_mask & np.isnan(self._known)
-            n = unconstrained_squares.sum(dtype=int)
-            # Only combine solutions mathematically if there are any uncertain squares left.
-            if solution_mask.any():
-                # Group solutions by the number of mines left unknown and outside of the solution area.
-                m_known = (self._known == 1).sum(dtype=int)
-                solutions_by_m = {}
-                for solution in solutions:
-                    # The known mines + the mines in the solutions
-                    m = m_known + solution[solution_mask].sum(dtype=int)
-                    m_left = self._total_mines - m
-                    # Append the solutions, making a new list if M_left isn't present yet.
-                    if m_left not in solutions_by_m:
-                        solutions_by_m[m_left] = []
-                    solutions_by_m[m_left].append(solution)
-                # Now for each M, calculate how heavily those solutions weigh through.
-                weights = self._relative_weights(solutions_by_m.keys(), n)
-                # Now we just sum the weighed solutions.
-                summed_weights = 0
-                summed_solution = np.zeros(state.shape)
-                for m, solutions in solutions_by_m.items():
-                    for solution in solutions:
-                        summed_weights += weights[m]
-                        summed_solution += weights[m] * solution.astype(int)
-                prob[solution_mask] = summed_solution[solution_mask]/summed_weights
-            # The remaining squares all have the same probability and the total probability has to equal `total_mines`.
-            if n > 0:
-                prob[unconstrained_squares] = (self._total_mines - prob[~np.isnan(prob)].sum())/n
+
+            # Now combine the solutions into one probability.
+            prob = self._combining_step(state, prob, solutions)
             return prob
         else:
             # If no cells are opened, just give each cell the same probability.
@@ -274,3 +246,46 @@ class Solver:
             ks = list(solution.keys())
             solution_mask[ys_vars[ks], xs_vars[ks]] = [solution[k] for k in ks]
         return solution_masks
+
+    def _combining_step(self, state, prob, solutions):
+        """ Combine the solutions into probabilities.
+            :param state: The state of the minesweeper game.
+            :param prob: The current probability array, which at this point should contain only 1's, 0's and np.nan's.
+            :param solutions: The solutions arrays from the CP step, with certain values removed, as they're already in
+                              `self._known`.
+        """
+        # Compute the number of known mines.
+        # That leaves us with a couple of squares on the boundary that we're uncertain of.
+        solution_mask = ~np.isnan(solutions[0])
+        # Now comes the most difficult part; each solution is *not* equally likely! We need to calculate the
+        # relative weight of each solution, which is proportional to the number of models that satisfy the given
+        # solution.
+        unconstrained_squares = np.isnan(state) & ~solution_mask & np.isnan(self._known)
+        n = unconstrained_squares.sum(dtype=int)
+        # Only combine solutions mathematically if there are any uncertain squares left.
+        if solution_mask.any():
+            # Group solutions by the number of mines left unknown and outside of the solution area.
+            m_known = (self._known == 1).sum(dtype=int)
+            solutions_by_m = {}
+            for solution in solutions:
+                # The known mines + the mines in the solutions
+                m = m_known + solution[solution_mask].sum(dtype=int)
+                m_left = self._total_mines - m
+                # Append the solutions, making a new list if M_left isn't present yet.
+                if m_left not in solutions_by_m:
+                    solutions_by_m[m_left] = []
+                solutions_by_m[m_left].append(solution)
+            # Now for each M, calculate how heavily those solutions weigh through.
+            weights = self._relative_weights(solutions_by_m.keys(), n)
+            # Now we just sum the weighed solutions.
+            summed_weights = 0
+            summed_solution = np.zeros(state.shape)
+            for m, solutions in solutions_by_m.items():
+                for solution in solutions:
+                    summed_weights += weights[m]
+                    summed_solution += weights[m] * solution.astype(int)
+            prob[solution_mask] = summed_solution[solution_mask] / summed_weights
+        # The remaining squares all have the same probability and the total probability has to equal `total_mines`.
+        if n > 0:
+            prob[unconstrained_squares] = (self._total_mines - prob[~np.isnan(prob)].sum()) / n
+        return prob
