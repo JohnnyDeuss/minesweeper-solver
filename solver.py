@@ -1,4 +1,7 @@
 """ A probabilistic minesweeper solver. It determines the probability of a mine being at a certain location.
+    This solver is correct about all minesweeper games that uniformly distributes its mines. A minesweeper game that
+    does things like trying to generate pattern with less guessing will likely have different mine distributions and will
+    return incorrect probabilities for uncertain squares.
     
     The solver works in several steps. The problem can be solved entirely with CP and math, but since CP is expensive,
     so use cheap method for finding known squares first, having 2 advantages:
@@ -19,7 +22,7 @@ import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage import generate_binary_structure
 from scipy.signal import convolve2d
-from constraint import Problem, ExactSumConstraint
+from constraint import Problem, ExactSumConstraint, MaxSumConstraint
 
 from functools import reduce
 
@@ -60,55 +63,60 @@ class Solver:
             # with the number N with N unflagged neighbors.
             prob, state = self._counting_step(state)
             # Stop early if the early stopping flag is set and we've found a safe square to open?
-            if self._stop_on_solution and (prob == 0).any():
+            if self._stop_on_solution and ~np.isnan(prob).all():
                 return prob
             # Compute all possible solutions of the boundary.
-            solutions, boundary_mask = self._cp_step(state)
-            # Obviously, opened cells have a 0% chance of having a mines.
-            prob[~np.isnan(state)] = 0
+            solutions = self._cp_step(state)
+            solution_mask = ~np.isnan(solutions[0])
             # Now mark known squares, because they appear in every possible solution of the boundary.
-            certain_mask = boundary_mask & np.array([solutions[0] == solutions[i] for i in range(len(solutions))]).all(axis=0)
-            prob[certain_mask] = solutions[0][certain_mask].astype(float)
+            certain_mask = solution_mask & np.array([solutions[0] == solutions[i] for i in range(len(solutions))]).all(axis=0)
+            prob[certain_mask] = solutions[0][certain_mask]
             # Also update the known array that we're keeping with these values.
             self._known[certain_mask] = solutions[0][certain_mask].astype(float)
+            # Stop early if the early stopping flag is set and we've found a safe square to open?
+            if self._stop_on_solution and ~np.isnan(prob).all():
+                return prob
             # Compute the number of known mines.
             # That leaves us with a couple of squares on the boundary that we're uncertain of.
-            solution_mask = boundary_mask ^ certain_mask
+            solution_mask = solution_mask & ~certain_mask
             # Now comes the most difficult part; each solution is *not* equally likely! We need to calculate the
-            # relative weight of each solution, which is proportional to the number of models that satisfy the given solution.
-            N = (np.isnan(state) ^ boundary_mask).sum()
-            # Group solutions by the number of mines left unknown and outside of the solution area.
-            M_known = (prob == 1).sum()
-            solutions_by_M = {}
-            for solution in solutions:
-                # The known mines + the mines in the solutions
-                M = M_known + solution[solution_mask].sum()
-                M_left = self._total_mines - M
-                # Append the solutions, making a new list if M_left isn't present yet.
-                if M_left not in solutions_by_M:
-                    solutions_by_M[M_left] = []
-                solutions_by_M[M_left].append(solution)
-            # Now for each M, calculate how heavily those solutions weigh through.
-            weights = self._relative_weights(solutions_by_M.keys(), N)
-            # Now we just sum the weighed solutions.
-            summed_weights = 0
-            solution_weights = np.zeros(state.shape)
-            for M, solutions in solutions_by_M.items():
+            # relative weight of each solution, which is proportional to the number of models that satisfy the given
+            # solution.
+            unconstrained_squares = np.isnan(state) & ~solution_mask & np.isnan(self._known)
+            n = unconstrained_squares.sum(dtype=int)
+            # Only combine solutions mathematically if there are any uncertain squares left.
+            if solution_mask.any():
+                # Group solutions by the number of mines left unknown and outside of the solution area.
+                m_known = (self._known == 1).sum(dtype=int)
+                solutions_by_m = {}
                 for solution in solutions:
-                    summed_weights += weights[M]
-                    solution_weights += weights[M] * solution.astype(int)
-            prob[solution_mask] = solution_weights[solution_mask]/summed_weights
+                    # The known mines + the mines in the solutions
+                    m = m_known + solution[solution_mask].sum(dtype=int)
+                    m_left = self._total_mines - m
+                    # Append the solutions, making a new list if M_left isn't present yet.
+                    if m_left not in solutions_by_m:
+                        solutions_by_m[m_left] = []
+                    solutions_by_m[m_left].append(solution)
+                # Now for each M, calculate how heavily those solutions weigh through.
+                weights = self._relative_weights(solutions_by_m.keys(), n)
+                # Now we just sum the weighed solutions.
+                summed_weights = 0
+                summed_solution = np.zeros(state.shape)
+                for m, solutions in solutions_by_m.items():
+                    for solution in solutions:
+                        summed_weights += weights[m]
+                        summed_solution += weights[m] * solution.astype(int)
+                prob[solution_mask] = summed_solution[solution_mask]/summed_weights
             # The remaining squares all have the same probability and the total probability has to equal `total_mines`.
-            prob[np.isnan(prob)] = (self._total_mines - prob[~np.isnan(prob)].sum())/N
-            if np.nan in prob:
-                print('AHA!')
+            if n > 0:
+                prob[unconstrained_squares] = (self._total_mines - prob[~np.isnan(prob)].sum())/n
             return prob
         else:
             # If no cells are opened, just give each cell the same probability.
             return np.full(state.shape, self._total_mines/state.size)
 
     @staticmethod
-    def _relative_weights(Ms, N):
+    def _relative_weights(ms, n):
         """ Compute the relative weights of solutions with M mines and N squares left. These weights are proportional
             to the number of models that have can have the given amount of mines and squares left.
 
@@ -130,22 +138,22 @@ class Solver:
                       = C(N, M) * (N-M+1)/(M+1)
             Or alternatively; C(N, M) = C(N, M-1) * (N-M)/M
 
-            So a solution with C(N, M) models weighs (N-M)/M+ times more than a solution with C(N, M-1) models, allowing
+            So a solution with C(N, M) models weighs (N-M)/M times more than a solution with C(N, M-1) models, allowing
             us to inductively calculate relative weights.
 
             :param Ms: A list of the number of mines left for which the weights will be computed.
             :param N: The number of empty squares left.
             :returns: The relative weights for each M, as a dictionary {M: weight}.
         """
-        Ms = sorted(Ms)
-        M = Ms[0]
+        ms = sorted(ms)
+        m = ms[0]
         weight = 1
         weights = {}
-        for M_next in Ms:
+        for m_next in ms:
             # Iteratively compute the weights, using the results computed above to update the weight.
-            for M in range(M+1, M_next+1):
-                weight *= (N-M)/M
-            weights[M] = weight
+            for m in range(m+1, m_next+1):
+                weight *= (n-m)/m
+            weights[m] = weight
         return weights
 
     @staticmethod
@@ -156,9 +164,10 @@ class Solver:
         """
         return binary_dilation(bool_ar, structure=generate_binary_structure(2, 2))
 
-    def _neighbors(self, bool_ar):
+    @staticmethod
+    def _neighbors(bool_ar):
         """ Return a binary mask marking all squares that neighbor a True cells in the boolean array. """
-        return bool_ar ^ self._dilate(bool_ar)
+        return bool_ar ^ Solver._dilate(bool_ar)
 
     def _neighbors_xy(self, x, y):
         """ Return a binary mask marking all squares that neighbor the square at (x, y). """
@@ -170,11 +179,13 @@ class Solver:
         mask[y, x] = True
         return mask
 
-    def _boundary(self, state):
+    @staticmethod
+    def _boundary(state):
         """ Return a binary mask marking all closed squares that are adjacent to a number. """
-        return self._neighbors(~np.isnan(state))
+        return Solver._neighbors(~np.isnan(state))
 
-    def _reduce_numbers(self, state, mines=None):
+    @staticmethod
+    def _reduce_numbers(state, mines=None):
         """ Reduce the numbers in the state to represent the number of mines next to it that have not been found yet.
             :param state: The state of the minefield.
             :param mines: The mines to use to reduce numbers
@@ -236,7 +247,6 @@ class Solver:
         """ Constraint programming step. Find all possible solutions for the squares is the boundary.
             :param state: The reduced state of the minefield.
             :returns solutions: A list of solutions where a masked value that's True indicates a mine and False an empty square.
-            :returns boundary_mask: The binary mask for which solutions are found, only masked values are part of the solution.
         """
         # Each square in the boundary is a variable, except where we already know the value.
         vars_mask = self._boundary(state) & np.isnan(self._known)
@@ -251,14 +261,16 @@ class Solver:
         constraints_mask = self._neighbors(vars_mask) & ~np.isnan(state)
         # For each constraint check which variables they apply to and add constraints to them.
         for y, x in zip(*constraints_mask.nonzero()):
-            cstrd_vars_mask = self._neighbors_xy(x, y) & vars_mask
-            cstrd_vars = var_lookup[cstrd_vars_mask.nonzero()]
-            problem.addConstraint(ExactSumConstraint(state[y][x]), list(cstrd_vars))
+            constrained_vars_mask = self._neighbors_xy(x, y) & vars_mask
+            constrained_var_names = var_lookup[constrained_vars_mask.nonzero()]
+            problem.addConstraint(ExactSumConstraint(state[y][x]), list(constrained_var_names))
+        # Add a constraint to the total number of mines.
+        problem.addConstraint(MaxSumConstraint(self._total_mines - (self._known == 1).sum(dtype=int)), variable_names)
         # Now just propagate the constraints to find squares that are certainly mines.
         solutions = problem.getSolutions()
-        solution_masks = [np.zeros(state.shape, dtype=bool) for _ in range(len(solutions))]
+        solution_masks = [np.full(state.shape, np.nan) for _ in range(len(solutions))]
         ys_vars, xs_vars = vars_mask.nonzero()  # Used for reverse lookup var_name -> (x, y)
         for solution, solution_mask in zip(solutions, solution_masks):
             ks = list(solution.keys())
             solution_mask[ys_vars[ks], xs_vars[ks]] = [solution[k] for k in ks]
-        return solution_masks, vars_mask
+        return solution_masks
