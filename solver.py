@@ -72,10 +72,10 @@ class Solver:
             # Now mark known squares, because they appear in every possible solution of the boundary.
             certain_mask = solution_mask & np.array([solutions[0] == solutions[i] for i in range(len(solutions))]).all(axis=0)
             prob[certain_mask] = solutions[0][certain_mask]
-            # Simplify the solutions by dropping the certain squares from all solutions.
-            solutions = [np.where(certain_mask, np.nan, solution) for solution in solutions]
             # Also update the known array that we're keeping with these values.
             self._known[certain_mask] = solutions[0][certain_mask].astype(float)
+            # Simplify the solutions by dropping the certain squares from all solutions.
+            solutions = [np.where(certain_mask, np.nan, solution) for solution in solutions]
             # Stop early if the early stopping flag is set and we've found a safe square to open?
             if self._stop_on_solution and ~np.isnan(prob).all():
                 return prob
