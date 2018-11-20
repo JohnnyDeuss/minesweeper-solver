@@ -20,48 +20,53 @@ class Example(QObject):
 
     @pyqtSlot()
     def quit(self):
+        """ Recaives exit messages from the GUI. """
         self.quitting = True
 
     def run(self):
         gui = self.gui
         game = gui.game
+        # Uncomment to make the probabilities come out right.
+        #game.set_config(first_never_mine=False)    # Disable to make first move probability is the same as the solver's?
         gui.aboutToQuit.connect(self.quit)
-        losses = 0
-        expected_losses = 0
+        wins = 0
+        games = 0
+        expected_wins = 0
 
         while not self.quitting:
+            expected_win = 1
+            games += 1
             solver = Solver(game.width, game.height, game.num_mines)
             state = game.state
             while not game.done and not self.quitting:
                 # Time how long a step takes to compute.
                 t = time()
                 prob = solver.solve(state)
-                print('step - {:.5}s'.format(time() - t))
                 # Flag newly found mines.
                 for y, x in zip(*((prob == 1) & (state != "flag")).nonzero()):
                     gui.right_click_action(x, y)
                 best_prob = np.nanmin(prob)
                 ys, xs = (prob == best_prob).nonzero()
                 if best_prob != 0:
-                    expected_losses += best_prob
+                    expected_win *= (1-best_prob)
                     x, y = nearest_policy(prob)
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     gui.left_click_action(x, y)
                 else:
-                    print('KNOW ({} squares)'.format(len(xs)))
                     # Open all the knowns.
                     for x, y in zip(xs, ys):
                         gui.left_click_action(x, y)
-                print('L = {}, E = {}'.format(losses, expected_losses))
-                sleep(1)
-            if not game.is_won():
-                losses += 1
+                sleep(0.25)
+            expected_wins += expected_win
+            if game.is_won():
+                wins += 1
+            print('GameWin% = {:.3}, Wins = {}, E[Wins] = {:.3}, TotalWin% = {:.3%}'.format(expected_win, wins, expected_wins, wins/games))
             sleep(5)
             gui.reset()
 
 
 if __name__ == '__main__':
-    gui = MinesweeperGUI()
+    gui = MinesweeperGUI(debug_mode=True)
     example = Example(gui)
     example_thread = Thread(target=example.run)
     example_thread.start()
