@@ -63,9 +63,8 @@ class Solver:
             # square with the number N with N unflagged neighbors.
             prob, state = self._counting_step(state)
             # Stop early if the early stopping flag is set and we've found a safe square to open?
-            if self._stop_on_solution and ~np.isnan(prob).all():
+            if self._stop_on_solution and ~np.isnan(prob).all() and 0 in prob:
                 return prob
-
             # Compute all possible solutions of the boundary.
             solutions = self._cp_step(state)
             # There may not be solutions if the boundary doesn't contain *any* unsolved squares.
@@ -78,7 +77,7 @@ class Solver:
             # Simplify the solutions by dropping the certain squares from all solutions.
             solutions = [np.where(certain_mask, np.nan, solution) for solution in solutions]
             # Stop early if the early stopping flag is set and we've found a safe square to open?
-            if self._stop_on_solution and ~np.isnan(prob).all():
+            if self._stop_on_solution and ~np.isnan(prob).all() and 0 in prob:
                 return prob
             # Now combine the solutions into one probability.
             prob = self._combining_step(state, prob, solutions)
