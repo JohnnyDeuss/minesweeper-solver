@@ -3,13 +3,13 @@
 """
 from time import time, sleep
 from threading import Thread
-from random import randrange
 
 from PyQt5.QtCore import pyqtSlot, QObject
 import numpy as np
 
 from minesweeper.gui import MinesweeperGUI
 from solver import Solver
+from solver.policies import nearest_policy
 
 
 class Example(QObject):
@@ -40,17 +40,12 @@ class Example(QObject):
                 # Flag newly found mines.
                 for y, x in zip(*((prob == 1) & (state != "flag")).nonzero()):
                     gui.right_click_action(x, y)
-                # Set the squares that were already opened to np.inf, so we can find the minimum of the unopened squares.
-                search_mask = np.array([[isinstance(state[y][x], int) for x in range(len(state[0]))] for y in range(len(state))])
-                prob[search_mask] = np.inf
                 best_prob = np.nanmin(prob)
                 ys, xs = (prob == best_prob).nonzero()
                 if best_prob != 0:
-                    # Pick a random  action from the best guesses.
-                    idx = randrange(len(xs))
-                    x, y = xs[idx], ys[idx]
-                    print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     expected_losses += best_prob
+                    x, y = nearest_policy(prob)
+                    print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     gui.left_click_action(x, y)
                 else:
                     print('KNOW ({} squares)'.format(len(xs)))
@@ -61,7 +56,7 @@ class Example(QObject):
                 sleep(1)
             if not game.is_won():
                 losses += 1
-            sleep(2.5)
+            sleep(5)
             gui.reset()
 
 

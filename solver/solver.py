@@ -50,7 +50,7 @@ class Solver:
                           a number, 'flag' or '?'.
             :returns: An array giving the probability that each square contains a mine. If `stop_on_solution` is set, a
                       partially computed result may be returned with a number of squares being np.nan, as they
-                      weren't computed yet.
+                      weren't computed yet. Squares that have already been opened will also be np.nan.
         """
         # Convert to an easier format to solve: only the numbers remain, the rest is np.nan.
         state = np.array([[state[y][x] if isinstance(state[y][x], int) else np.nan for x in range(len(state[0]))] for y in range(len(state))])
