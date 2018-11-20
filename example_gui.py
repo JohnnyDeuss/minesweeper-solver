@@ -20,7 +20,7 @@ class Example(QObject):
 
     @pyqtSlot()
     def quit(self):
-        """ Recaives exit messages from the GUI. """
+        """ Receives exit messages from the GUI. """
         self.quitting = True
 
     def run(self):
@@ -60,13 +60,14 @@ class Example(QObject):
             expected_wins += expected_win
             if game.is_won():
                 wins += 1
-            print('GameWin% = {:.3}, Wins = {}, E[Wins] = {:.3}, TotalWin% = {:.3%}'.format(expected_win, wins, expected_wins, wins/games))
+            print('{} | E[GameWin%] = {:.3}, Wins = {}, E[Wins] = {:.3}, Win% = {:.3%}'.format(
+                'W' if game.is_won() else 'L', expected_win, wins, expected_wins, wins/games))
             sleep(5)
             gui.reset()
 
 
 if __name__ == '__main__':
-    gui = MinesweeperGUI(debug_mode=True)
+    gui = MinesweeperGUI(debug_mode=True, difficulty='intermediate')
     example = Example(gui)
     example_thread = Thread(target=example.run)
     example_thread.start()
