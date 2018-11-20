@@ -5,7 +5,9 @@
     learning can provide a way to determine a better way to pick squares than at random from the squares that are the
     least likely to contain a mine.
 
-    Some simple policies are located in this module.
+    Some simple policies are located in this module. They should only be used when uncertainties occur. If squares are
+    certain, open them first, as the policies in this package don't attempt to deal with np.nan's on unopened squares,
+    as they should never occur after the solver starts dealing with uncertainty.
 """
-from .random_policy import random_policy
-from .nearest_policy import nearest_policy
+from .policies import *
+from .make_policy import make_policy

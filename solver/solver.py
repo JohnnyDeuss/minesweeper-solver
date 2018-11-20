@@ -68,17 +68,18 @@ class Solver:
             # Compute all possible solutions of the boundary.
             solutions = self._cp_step(state)
             # There may not be solutions if the boundary doesn't contain *any* unsolved squares.
-            solution_mask = ~np.isnan(solutions[0])
-            # Now mark known squares, because they appear in every possible solution of the boundary.
-            certain_mask = solution_mask & np.array([solutions[0] == solutions[i] for i in range(len(solutions))]).all(axis=0)
-            prob[certain_mask] = solutions[0][certain_mask]
-            # Also update the known array that we're keeping with these values.
-            self._known[certain_mask] = solutions[0][certain_mask].astype(float)
-            # Simplify the solutions by dropping the certain squares from all solutions.
-            solutions = [np.where(certain_mask, np.nan, solution) for solution in solutions]
-            # Stop early if the early stopping flag is set and we've found a safe square to open?
-            if self._stop_on_solution and ~np.isnan(prob).all() and 0 in prob:
-                return prob
+            if solutions:
+                solution_mask = ~np.isnan(solutions[0])
+                # Now mark known squares, because they appear in every possible solution of the boundary.
+                certain_mask = solution_mask & np.array([solutions[0] == solutions[i] for i in range(len(solutions))]).all(axis=0)
+                prob[certain_mask] = solutions[0][certain_mask]
+                # Also update the known array that we're keeping with these values.
+                self._known[certain_mask] = solutions[0][certain_mask].astype(float)
+                # Simplify the solutions by dropping the certain squares from all solutions.
+                solutions = [np.where(certain_mask, np.nan, solution) for solution in solutions]
+                # Stop early if the early stopping flag is set and we've found a safe square to open?
+                if self._stop_on_solution and ~np.isnan(prob).all() and 0 in prob:
+                    return prob
             # Now combine the solutions into one probability.
             prob = self._combining_step(state, prob, solutions)
             return prob
@@ -180,9 +181,9 @@ class Solver:
         new_results = True
         # Subtract all numbers by the amount of neighboring mines we've already found, simplifying the game.
         state = self._reduce_numbers(state, self._known == 1)
+        # Calculate the unknown square, i.e. unopened and we've not previously found their value (is in `self._known`).
+        unknown_squares = np.isnan(state) & np.isnan(self._known)
         while new_results:
-            # Calculate the unknown square, i.e. unopened and we've not previously found their value (is in `self._known`).
-            unknown_squares = np.isnan(state) & np.isnan(self._known)
             # Calculate how many unknown squares are next to each square (uses 2D convolution, which essentially just counts
             # how many Trues are next to a square).
             num_unknown_neighbors = convolve2d(unknown_squares, np.ones((3, 3)), mode='same')
@@ -197,7 +198,7 @@ class Solver:
             self._known[known_mines] = 1
             # Further reduce the numbers first.
             state = self._reduce_numbers(state, known_mines)
-            # Update what is unknown
+            # Update what is unknown.
             unknown_squares = unknown_squares & ~known_mines
             ### First part: finding squares with a 0 in and unflagged/unopened neighbors (which must all be safe).
             # Calculate the square that have a 0 on them, but still have unknown neighbors.
@@ -208,6 +209,8 @@ class Solver:
                 [self._neighbors_xy(x, y) for y, x in zip(*solutions.nonzero())], np.zeros(state.shape, dtype=bool))
             # Update our known matrix with these new finding; 0 for safe squares.
             self._known[known_safe] = 0
+            # Update what is unknown.
+            unknown_squares = unknown_squares & ~known_safe
             # Now update the result matrix, 0 for safe squares, 1 for mines.
             result[known_safe] = 0
             result[known_mines] = 1
@@ -262,6 +265,8 @@ class Solver:
         n = unconstrained_squares.sum(dtype=int)
         # In some rare cases, there are no unsolved squares in the boundary and we don't need to do CP.
         if solution_mask.any():
+            if not solutions:
+                print('FU')
             # Group solutions by the number of mines left unknown and outside of the solution area.
             m_known = (self._known == 1).sum(dtype=int)
             solutions_by_m = {}
