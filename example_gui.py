@@ -1,7 +1,7 @@
 """ Use the solver to solve a random problem, it uses the minesweeper implementation and GUI from
     https://github.com/JohnnyDeuss/minesweeper to generate minefields and display the results.
 """
-from time import time, sleep
+from time import sleep
 from threading import Thread
 
 from PyQt5.QtCore import pyqtSlot, QObject

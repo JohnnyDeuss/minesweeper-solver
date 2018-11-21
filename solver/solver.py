@@ -18,13 +18,13 @@
     operations, so understanding those is critical to understanding how some steps work. This makes the code brief and
     easy to understand if you know these concepts, without having to bother with things like bounds checking.
 """
+from functools import reduce
+
 import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage import generate_binary_structure
 from scipy.signal import convolve2d
 from constraint import Problem, ExactSumConstraint, MaxSumConstraint
-
-from functools import reduce
 
 
 class Solver:
