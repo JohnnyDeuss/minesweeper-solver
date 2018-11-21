@@ -9,7 +9,7 @@ import numpy as np
 
 from minesweeper.gui import MinesweeperGUI
 from solver import Solver
-from solver.policies import nearest_policy
+from solver.policies import corner_then_edge2_policy
 
 
 class Example(QObject):
@@ -39,8 +39,6 @@ class Example(QObject):
             solver = Solver(game.width, game.height, game.num_mines)
             state = game.state
             while not game.done and not self.quitting:
-                # Time how long a step takes to compute.
-                t = time()
                 prob = solver.solve(state)
                 # Flag newly found mines.
                 for y, x in zip(*((prob == 1) & (state != "flag")).nonzero()):
@@ -49,14 +47,14 @@ class Example(QObject):
                 ys, xs = (prob == best_prob).nonzero()
                 if best_prob != 0:
                     expected_win *= (1-best_prob)
-                    x, y = nearest_policy(prob)
+                    x, y = corner_then_edge2_policy(prob)
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     gui.left_click_action(x, y)
                 else:
                     # Open all the knowns.
                     for x, y in zip(xs, ys):
                         gui.left_click_action(x, y)
-                sleep(0.25)
+                sleep(0.01)
             expected_wins += expected_win
             if game.is_won():
                 wins += 1
