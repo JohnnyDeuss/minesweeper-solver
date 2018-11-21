@@ -1,10 +1,11 @@
 """ A probabilistic minesweeper solver. It determines the probability of a mine being at a certain location.
     This solver is correct about all minesweeper games that uniformly distributes its mines. A minesweeper game that
-    does things like trying to generate pattern with less guessing will likely have different mine distributions and will
-    return incorrect probabilities for uncertain squares.
+    does things like trying to generate pattern with less guessing will likely have different mine distributions and
+    will return incorrect probabilities for uncertain squares. Another example of uniform mines distribution is Windows
+    98's version of the no mine on first click implementation, which moves the mine under the mouse.
     
     The solver works in several steps. The problem can be solved entirely with CP and math, but since CP is expensive,
-    so use cheap method for finding known squares first, having 2 advantages:
+    we use cheap method for finding known squares first, having 2 advantages:
     - The number of variables is CP is reduced.
     - The boundary could be split up into two pieces, which can be solved separately, greatly improving efficiency.
     The current implementation has the following three steps:
@@ -21,10 +22,9 @@
 from functools import reduce
 
 import numpy as np
-from scipy.ndimage.morphology import binary_dilation
-from scipy.ndimage import generate_binary_structure
-from scipy.signal import convolve2d
 from constraint import Problem, ExactSumConstraint, MaxSumConstraint
+
+from .tools import *
 
 
 class Solver:
@@ -38,7 +38,6 @@ class Solver:
             :param total_mines: The total number of mines in the game (flagged or not).
         """
         # Known mines are 1, known empty squares are 0, uncertain are np.nan.
-        self._width, self._height = width, height
         self._total_mines = total_mines
         self._mines_left = total_mines
         self._known = np.full((height, width), np.nan)
@@ -129,42 +128,12 @@ class Solver:
         return weights
 
     @staticmethod
-    def _dilate(bool_ar):
-        """ Perform binary dilation with a structuring element with connectivity 2. Essentially what this kind of
-            dilation does is return True for any square that has a True anywhere in the 8 squares surrounding it or if
-            it itself is True.
-        """
-        return binary_dilation(bool_ar, structure=generate_binary_structure(2, 2))
-
-    @staticmethod
-    def _neighbors(bool_ar):
-        """ Return a binary mask marking all squares that neighbor a True cells in the boolean array. """
-        return bool_ar ^ Solver._dilate(bool_ar)
-
-    def _neighbors_xy(self, x, y):
-        """ Return a binary mask marking all squares that neighbor the square at (x, y). """
-        return self._neighbors(self._mask_square(x, y))
-
-    def _mask_square(self, x, y):
-        """ Create a binary mask that marks only the square at (x, y). """
-        mask = np.zeros((self._height, self._width), dtype=bool)
-        mask[y, x] = True
-        return mask
-
-    @staticmethod
-    def _boundary(state):
-        """ Return a binary mask marking all closed squares that are adjacent to a number. """
-        return Solver._neighbors(~np.isnan(state))
-
-    @staticmethod
     def _reduce_numbers(state, mines=None):
         """ Reduce the numbers in the state to represent the number of mines next to it that have not been found yet.
             :param state: The state of the minefield.
             :param mines: The mines to use to reduce numbers
         """
-        # Calculate the number of known mines neighbors of a cell (uses 2D convolution, which essentially just counts
-        # how many True's are next to a square).
-        num_neighboring_mines = convolve2d(mines, np.ones((3, 3)), mode='same')
+        num_neighboring_mines = count_neighbors(mines)
         state[~np.isnan(state)] -= num_neighboring_mines[~np.isnan(state)]
         return state
 
@@ -184,16 +153,14 @@ class Solver:
         # Calculate the unknown square, i.e. unopened and we've not previously found their value (is in `self._known`).
         unknown_squares = np.isnan(state) & np.isnan(self._known)
         while new_results:
-            # Calculate how many unknown squares are next to each square (uses 2D convolution, which essentially just counts
-            # how many Trues are next to a square).
-            num_unknown_neighbors = convolve2d(unknown_squares, np.ones((3, 3)), mode='same')
+            num_unknown_neighbors = count_neighbors(unknown_squares)
             ### Second part: finding squares with number N and N unflagged/unopened neighbors (which must all be mines).
             # Calculate squares with the same amount of unflagged neighbors as neighboring mines.
             solutions = (state == num_unknown_neighbors) & (num_unknown_neighbors > 0)
             # Again, create a mask for all those squares that we now know are mines.
             # The reduce makes a neighbor mask for each solution and or's them together, making one big neighbor mask.
             known_mines = unknown_squares & reduce(np.logical_or,
-                [self._neighbors_xy(x, y) for y, x in zip(*solutions.nonzero())], np.zeros(state.shape, dtype=bool))
+                [neighbors_xy(x, y, state.shape) for y, x in zip(*solutions.nonzero())], np.zeros(state.shape, dtype=bool))
             # Update our known matrix with these new finding; 1 for mines.
             self._known[known_mines] = 1
             # Further reduce the numbers first.
@@ -206,7 +173,7 @@ class Solver:
             # Select only those squares that are unknown and we've found to be neighboring any of the found solutions.
             # The reduce makes a neighbor mask for each solution and or's them together, making one big neighbor mask.
             known_safe = unknown_squares & reduce(np.logical_or,
-                [self._neighbors_xy(x, y) for y, x in zip(*solutions.nonzero())], np.zeros(state.shape, dtype=bool))
+                [neighbors_xy(x, y, state.shape) for y, x in zip(*solutions.nonzero())], np.zeros(state.shape, dtype=bool))
             # Update our known matrix with these new finding; 0 for safe squares.
             self._known[known_safe] = 0
             # Update what is unknown.
@@ -223,7 +190,7 @@ class Solver:
             :returns solutions: A list of solutions where a masked value that's True indicates a mine and False an empty square.
         """
         # Each square in the boundary is a variable, except where we already know the value.
-        vars_mask = self._boundary(state) & np.isnan(self._known)
+        vars_mask = boundary(state) & np.isnan(self._known)
         # Start a CP problem to work with (= CP solver).
         problem = Problem()
         variable_names = range(np.count_nonzero(vars_mask))
@@ -232,10 +199,10 @@ class Solver:
         var_lookup = np.zeros(state.shape, dtype=int)
         var_lookup[vars_mask.nonzero()] = variable_names
         # Find all _neighbors of the variables that containing numbers, which define their constraints.
-        constraints_mask = self._neighbors(vars_mask) & ~np.isnan(state)
+        constraints_mask = neighbors(vars_mask) & ~np.isnan(state)
         # For each constraint check which variables they apply to and add constraints to them.
         for y, x in zip(*constraints_mask.nonzero()):
-            constrained_vars_mask = self._neighbors_xy(x, y) & vars_mask
+            constrained_vars_mask = neighbors_xy(x, y, vars_mask.shape) & vars_mask
             constrained_var_names = var_lookup[constrained_vars_mask.nonzero()]
             problem.addConstraint(ExactSumConstraint(state[y][x]), list(constrained_var_names))
         # Add a constraint to the total number of mines.
