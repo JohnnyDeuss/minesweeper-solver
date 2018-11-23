@@ -205,9 +205,9 @@ class Solver:
             summed_weights = 0
             summed_solution = np.zeros(state.shape)
             for m, solutions in solutions_by_m.items():
-                for solution in solutions:
-                    summed_weights += weights[m]
-                    summed_solution += weights[m] * solution.astype(int)
+                added_weight = weights[m]
+                summed_weights += len(solutions)*weights[m]
+                summed_solution += weights[m] * reduce(np.add, solutions)
             prob[solution_mask] = summed_solution[solution_mask] / summed_weights
         # The remaining squares all have the same probability and the total probability has to equal `total_mines`.
         if n > 0:
