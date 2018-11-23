@@ -127,16 +127,6 @@ class Solver:
             weights[m] = weight
         return weights
 
-    @staticmethod
-    def _reduce_numbers(state, mines=None):
-        """ Reduce the numbers in the state to represent the number of mines next to it that have not been found yet.
-            :param state: The state of the minefield.
-            :param mines: The mines to use to reduce numbers
-        """
-        num_neighboring_mines = count_neighbors(mines)
-        state[~np.isnan(state)] -= num_neighboring_mines[~np.isnan(state)]
-        return state
-
     def _counting_step(self, state):
         """ Find all trivially easy solutions, i.e. a square with a 0 in it that has unflagged and unopened neighbors
             (= open all those neighbors) or a square with a number that matched the number of unflagged and unopened
@@ -149,7 +139,7 @@ class Solver:
         # This step can be done multiple times, as each time we have results, more numbers can be reduced.
         new_results = True
         # Subtract all numbers by the amount of neighboring mines we've already found, simplifying the game.
-        state = self._reduce_numbers(state, self._known == 1)
+        state = reduce_numbers(state, self._known == 1)
         # Calculate the unknown square, i.e. unopened and we've not previously found their value (is in `self._known`).
         unknown_squares = np.isnan(state) & np.isnan(self._known)
         while new_results:
@@ -164,7 +154,7 @@ class Solver:
             # Update our known matrix with these new finding; 1 for mines.
             self._known[known_mines] = 1
             # Further reduce the numbers first.
-            state = self._reduce_numbers(state, known_mines)
+            state = reduce_numbers(state, known_mines)
             # Update what is unknown.
             unknown_squares = unknown_squares & ~known_mines
             ### First part: finding squares with a 0 in and unflagged/unopened neighbors (which must all be safe).
@@ -194,7 +184,7 @@ class Solver:
         # Start a CP problem to work with (= CP solver).
         problem = Problem()
         variable_names = range(np.count_nonzero(vars_mask))
-        problem.addVariables(variable_names, [0, 1])     # Each square can have a 0 or a 1, i.e. no mine and mine.
+        problem.addVariables(variable_names, [False, True])
         # Create a 2D array to quickly look up the `Problem` name of the variable squares.
         var_lookup = np.zeros(state.shape, dtype=int)
         var_lookup[vars_mask.nonzero()] = variable_names
@@ -232,8 +222,6 @@ class Solver:
         n = unconstrained_squares.sum(dtype=int)
         # In some rare cases, there are no unsolved squares in the boundary and we don't need to do CP.
         if solution_mask.any():
-            if not solutions:
-                print('FU')
             # Group solutions by the number of mines left unknown and outside of the solution area.
             m_known = (self._known == 1).sum(dtype=int)
             solutions_by_m = {}
@@ -257,5 +245,5 @@ class Solver:
             prob[solution_mask] = summed_solution[solution_mask] / summed_weights
         # The remaining squares all have the same probability and the total probability has to equal `total_mines`.
         if n > 0:
-            prob[unconstrained_squares] = (self._total_mines - prob[~np.isnan(prob)].sum()) / n
+            prob[unconstrained_squares] = (self._total_mines - m_known - prob[~np.isnan(prob)].sum()) / n
         return prob

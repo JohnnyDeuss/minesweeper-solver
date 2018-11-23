@@ -1,4 +1,4 @@
-""" Tools that are useful for working with minesweeper arrays. """
+""" A package with common functions useful to working with minesweeper games. """
 import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage import generate_binary_structure
@@ -40,3 +40,12 @@ def count_neighbors(bool_ar):
     filter = np.ones((3, 3))
     filter[1, 1] = 0
     return convolve2d(bool_ar, filter, mode='same')
+
+def reduce_numbers(state, mines=None):
+    """ Reduce the numbers in the state to represent the number of mines next to it that have not been found yet.
+        :param state: The state of the minefield.
+        :param mines: The mines to use to reduce numbers
+    """
+    num_neighboring_mines = count_neighbors(mines)
+    state[~np.isnan(state)] -= num_neighboring_mines[~np.isnan(state)]
+    return state
