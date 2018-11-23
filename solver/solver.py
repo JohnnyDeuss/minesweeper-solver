@@ -244,6 +244,9 @@ class Solver:
             :param N: The number of empty squares left.
             :returns: The relative weights for each M, as a dictionary {M: weight}.
         """
+        # Special case: N == 0, all solutions should have the same weight.
+        if n == 0:
+            return {m: 1 for m in ms}
         ms = sorted(ms)
         m = ms[0]
         weight = 1
@@ -251,7 +254,7 @@ class Solver:
         for m_next in ms:
             # Iteratively compute the weights, using the results computed above to update the weight.
             for m in range(m+1, m_next+1):
-                # Edge case due to factorial in the derivation.
+                # Special case: m == n, due to factorial in the derivation.
                 if n == m:
                     weight *= 1/m
                 else:
