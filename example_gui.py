@@ -2,7 +2,9 @@
     https://github.com/JohnnyDeuss/minesweeper to generate minefields and display the results.
 
     Interesting seeds:
-    1614353606 - A case where the top-left unconstrained may have as many mines as squares.
+     1614353606 - Top-left unconstrained may have as many mines as squares.
+    -1365615019 - Top-right corner where there are no unconstrained and many constrained, highlightss weight and
+                  constraint issues.
 """
 from time import sleep
 from threading import Thread

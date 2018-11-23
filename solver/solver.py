@@ -22,7 +22,7 @@
 from functools import reduce
 
 import numpy as np
-from constraint import Problem, ExactSumConstraint, MaxSumConstraint
+from constraint import Problem, ExactSumConstraint, MaxSumConstraint, MinSumConstraint
 
 from .tools import *
 
@@ -144,7 +144,7 @@ class Solver:
         vars_mask = boundary(state) & np.isnan(self._known)
         # Start a CP problem to work with (= CP solver).
         problem = Problem()
-        variable_names = range(np.count_nonzero(vars_mask))
+        variable_names = range(vars_mask.sum())
         problem.addVariables(variable_names, [False, True])
         # Create a 2D array to quickly look up the `Problem` name of the variable squares.
         var_lookup = np.zeros(state.shape, dtype=int)
@@ -156,8 +156,13 @@ class Solver:
             constrained_vars_mask = neighbors_xy(x, y, vars_mask.shape) & vars_mask
             constrained_var_names = var_lookup[constrained_vars_mask.nonzero()]
             problem.addConstraint(ExactSumConstraint(state[y][x]), list(constrained_var_names))
-        # Add a constraint to the total number of mines.
-        problem.addConstraint(MaxSumConstraint(self._total_mines - (self._known == 1).sum(dtype=int)), variable_names)
+        # Add a constraint that there can be at most as many mines as there are left.
+        num_mines = (self._known == 1).sum(dtype=int)
+        problem.addConstraint(MaxSumConstraint(self._total_mines - num_mines), variable_names)
+        # Add a constraint that the boundary must contain at least enough mines such that it and the unconstrained
+        # square combined can contain the total number of mines.
+        num_unconstrained = (np.isnan(state) & ~vars_mask & np.isnan(self._known)).sum()
+        problem.addConstraint(MinSumConstraint(max(0, self._total_mines - num_mines - num_unconstrained)), variable_names)
         # Now just propagate the constraints to find squares that are certainly mines.
         solutions = problem.getSolutions()
         solution_masks = [np.full(state.shape, np.nan) for _ in range(len(solutions))]
