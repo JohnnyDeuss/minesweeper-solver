@@ -1,5 +1,8 @@
 """ Use the solver to solve a random problem, it uses the minesweeper implementation and GUI from
     https://github.com/JohnnyDeuss/minesweeper to generate minefields and display the results.
+
+    Interesting seeds:
+    1614353606 - A case where the top-left unconstrained may have as many mines as squares.
 """
 from time import sleep
 from threading import Thread
@@ -12,7 +15,6 @@ from scipy.signal import convolve2d
 from minesweeper.gui import MinesweeperGUI
 from solver import Solver
 from solver.policies import nearest_policy
-from solver.tools import reduce_numbers, neighbors_xy, count_neighbors
 
 
 class Example(QObject):
@@ -81,11 +83,11 @@ def verify(game, prob):
         - The summed probability of all squares is the number of mines left.
         - The summed probability of cells around that square is the number of mines left to it.
     """
-    if not ((prob[~np.isnan(prob)] >= 0).all() and (prob[~np.isnan(prob)] <= 1).all()):
+    if not ((prob[~np.isnan(prob)] > 0).all() and (prob[~np.isnan(prob)] <= 1).all()):
         raise Exception('There is a probability outside of the [0, 1] range.')
     if not (0 < np.nanmin(prob) < 1):
         raise Exception('The best probability is outside of the range ]0, 1[.')
-    if not np.isclose(np.nansum(prob), game.mines_left):
+    if not np.isclose(np.nansum(prob), game.mines_left + (prob == 1).sum()):
         raise Exception("The total probability doesn't add up to the number of mines left.")
     ar = prob.copy()
     ar[np.isnan(ar)] = 0

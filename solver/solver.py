@@ -39,7 +39,6 @@ class Solver:
         """
         # Known mines are 1, known empty squares are 0, uncertain are np.nan.
         self._total_mines = total_mines
-        self._mines_left = total_mines
         self._known = np.full((height, width), np.nan)
         self._stop_on_solution = stop_on_solution
 
@@ -81,51 +80,13 @@ class Solver:
                     return prob
             # Now combine the solutions into one probability.
             prob = self._combining_step(state, prob, solutions)
+            # It's still possible to find certain values if they appear outside of the boundary, so remember them.
+            certain_mask = ((prob == 0) | (prob == 1)) & np.isnan(self._known)
+            self._known[certain_mask] = prob[certain_mask]
             return prob
         else:
             # If no cells are opened, just give each cell the same probability.
             return np.full(state.shape, self._total_mines/state.size)
-
-    @staticmethod
-    def _relative_weights(ms, n):
-        """ Compute the relative weights of solutions with M mines and N squares left. These weights are proportional
-            to the number of models that have can have the given amount of mines and squares left.
-
-            The number of models with N squares and M mines left is C(N, M) = N!/((N-M)!M!). To understand this formula,
-            realise that the numerator is the number of permutations that of N squares. That number doesn't account for
-            the permutations that have identical results. This is because two mines can be swapped without the result
-            changing, the same goes for empty square. The denominator divides these duplicates out. (N-M)! divides out
-            the number ways that empty squares can form duplicate results and M! divides out the the number of ways
-            mines can form duplicate results. C(N, M) can be used to weigh solutions, but since C(N, M) can become very
-            big, we can also compute how much more a solution weighs through compared to a solution with a different
-            C(N, M').
-
-            We actually don't need to know or calculate C(N, M), we just need to know how to weigh solutions relative to
-            each other. To find these relative weights we look at the following series of equalities equalities:
-
-            C(N, M+1) = N!/((N-(M+1)!(M+1)!)
-                      = N!/(((N-M)!/(N-M+1))(M)!(M+1))
-                      = N!/((N-M)!M!) * (N-M+1)/(M+1)
-                      = C(N, M) * (N-M+1)/(M+1)
-            Or alternatively; C(N, M) = C(N, M-1) * (N-M)/M
-
-            So a solution with C(N, M) models weighs (N-M)/M times more than a solution with C(N, M-1) models, allowing
-            us to inductively calculate relative weights.
-
-            :param Ms: A list of the number of mines left for which the weights will be computed.
-            :param N: The number of empty squares left.
-            :returns: The relative weights for each M, as a dictionary {M: weight}.
-        """
-        ms = sorted(ms)
-        m = ms[0]
-        weight = 1
-        weights = {}
-        for m_next in ms:
-            # Iteratively compute the weights, using the results computed above to update the weight.
-            for m in range(m+1, m_next+1):
-                weight *= (n-m)/m
-            weights[m] = weight
-        return weights
 
     def _counting_step(self, state):
         """ Find all trivially easy solutions, i.e. a square with a 0 in it that has unflagged and unopened neighbors
@@ -245,5 +206,55 @@ class Solver:
             prob[solution_mask] = summed_solution[solution_mask] / summed_weights
         # The remaining squares all have the same probability and the total probability has to equal `total_mines`.
         if n > 0:
-            prob[unconstrained_squares] = (self._total_mines - m_known - prob[~np.isnan(prob)].sum()) / n
+            # Recompute m_known in case we haven't yet.
+            m_known = m_known if 'm_known' in locals() else (self._known == 1).sum(dtype=int)
+            # The amount of remaining mines is distributed evenly over the unconstrained squares.
+            prob[unconstrained_squares] = (self._total_mines - m_known - prob[~np.isnan(prob) & (prob != 1)].sum()) / n
         return prob
+
+    @staticmethod
+    def _relative_weights(ms, n):
+        """ Compute the relative weights of solutions with M mines and N squares left. These weights are proportional
+            to the number of models that have can have the given amount of mines and squares left.
+
+            The number of models with N squares and M mines left is C(N, M) = N!/((N-M)!M!). To understand this formula,
+            realise that the numerator is the number of permutations that of N squares. That number doesn't account for
+            the permutations that have identical results. This is because two mines can be swapped without the result
+            changing, the same goes for empty square. The denominator divides these duplicates out. (N-M)! divides out
+            the number ways that empty squares can form duplicate results and M! divides out the the number of ways
+            mines can form duplicate results. C(N, M) can be used to weigh solutions, but since C(N, M) can become very
+            big, we can also compute how much more a solution weighs through compared to a solution with a different
+            C(N, M').
+
+            We actually don't need to know or calculate C(N, M), we just need to know how to weigh solutions relative to
+            each other. To find these relative weights we look at the following series of equalities equalities:
+
+            C(N, M+1) = N! / ((N-(M+1))! (M+1)!)
+                      = N! / (((N-M)!/(N-M+1)) M!(M+1))
+                      = N! / ((N-M)! M!) * (N-M+1)/(M+1)
+                      = C(N, M) * (N-M+1) / (M+1)
+            Or alternatively: C(N, M) = C(N, M-1) * (N-M)/M
+            Notice that there is however an edge case where this equation doesn't hold, where N=M+1, you'd have
+            a division by zero within (((N-M)!/(N-M+1)).
+
+            So a solution with C(N, M) models weighs (N-M)/M times more than a solution with C(N, M-1) models, allowing
+            us to inductively calculate relative weights.
+
+            :param Ms: A list of the number of mines left for which the weights will be computed.
+            :param N: The number of empty squares left.
+            :returns: The relative weights for each M, as a dictionary {M: weight}.
+        """
+        ms = sorted(ms)
+        m = ms[0]
+        weight = 1
+        weights = {}
+        for m_next in ms:
+            # Iteratively compute the weights, using the results computed above to update the weight.
+            for m in range(m+1, m_next+1):
+                # Edge case due to factorial in the derivation.
+                if n == m:
+                    weight *= 1/m
+                else:
+                    weight *= (n-m)/m
+            weights[m] = weight
+        return weights

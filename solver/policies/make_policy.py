@@ -22,7 +22,7 @@ def make_policy(preferences=no_preference, selection_methods=nearest):
                                   `policies.selection_methods.`
     """
     def template(preferences, selection_methods, prob):
-        best = prob == (np.nanmin(prob))
+        best = prob == np.nanmin(prob)
         for preference_selector in preferences:
             preferred = preference_selector(prob)
             preferred = preferred & best    # Now only look at those that have optimal probabilities.
