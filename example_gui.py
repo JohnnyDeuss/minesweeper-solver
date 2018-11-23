@@ -37,6 +37,11 @@ class Example(QObject):
         expected_wins = 0
 
         while not self.quitting:
+            seed = random.randint(-2 ** 31, 2 ** 31 - 1)
+            print('Seed: {}'.format(seed))
+            random.seed(seed)
+            gui.reset()
+
             expected_win = 1
             games += 1
             solver = Solver(game.width, game.height, game.num_mines)
@@ -65,7 +70,6 @@ class Example(QObject):
             print('{} | E[GameWin%] = {:.3}, Wins = {}, E[Wins] = {:.3}, Win% = {:.3%}'.format(
                 'W' if game.is_won() else 'L', expected_win, wins, expected_wins, wins/games))
             sleep(5)
-            gui.reset()
 
 
 def verify(game, prob):
