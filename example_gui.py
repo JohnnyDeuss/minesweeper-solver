@@ -3,13 +3,16 @@
 """
 from time import sleep
 from threading import Thread
+import random
 
 from PyQt5.QtCore import pyqtSlot, QObject
 import numpy as np
+from scipy.signal import convolve2d
 
 from minesweeper.gui import MinesweeperGUI
 from solver import Solver
-from solver.policies import corner_then_edge2_policy
+from solver.policies import nearest_policy
+from solver.tools import reduce_numbers, neighbors_xy, count_neighbors
 
 
 class Example(QObject):
@@ -46,15 +49,16 @@ class Example(QObject):
                 best_prob = np.nanmin(prob)
                 ys, xs = (prob == best_prob).nonzero()
                 if best_prob != 0:
+                    verify(game, prob)
                     expected_win *= (1-best_prob)
-                    x, y = corner_then_edge2_policy(prob)
+                    x, y = nearest_policy(prob)
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     gui.left_click_action(x, y)
                 else:
                     # Open all the knowns.
                     for x, y in zip(xs, ys):
                         gui.left_click_action(x, y)
-                sleep(0.01)
+                sleep(1)
             expected_wins += expected_win
             if game.is_won():
                 wins += 1
@@ -64,8 +68,34 @@ class Example(QObject):
             gui.reset()
 
 
+def verify(game, prob):
+    """ Verify that the probabilistic solutions hasn't returned errors.
+
+        There are a number of things we know for certain that must hold:
+        - All known values must be between 0 and 1.
+        - If we're in the probabilistic stage, the best probability can't be 1, nor can it be negative.
+        - The summed probability of all squares is the number of mines left.
+        - The summed probability of cells around that square is the number of mines left to it.
+    """
+    if not ((prob[~np.isnan(prob)] >= 0).all() and (prob[~np.isnan(prob)] <= 1).all()):
+        raise Exception('There is a probability outside of the [0, 1] range.')
+    if not (0 < np.nanmin(prob) < 1):
+        raise Exception('The best probability is outside of the range ]0, 1[.')
+    if not np.isclose(np.nansum(prob), game.mines_left):
+        raise Exception("The total probability doesn't add up to the number of mines left.")
+    ar = prob.copy()
+    ar[np.isnan(ar)] = 0
+    ar[np.array(game.state) == 'flag'] = 1
+    summed_prob = convolve2d(ar, np.ones((3, 3)), mode='same')
+    state = np.array([[game.state[y][x] if isinstance(game.state[y][x], int) else np.nan
+                       for x in range(len(game.state[0]))] for y in range(len(game.state))])
+    if not np.isnan(state).all() and not np.isclose(state[~np.isnan(state)], summed_prob[~np.isnan(state)]).all():
+        raise Exception("The probability sum around a number doesn't add up to the number - known mines.")
+
+
 if __name__ == '__main__':
-    gui = MinesweeperGUI(debug_mode=True, difficulty='intermediate')
+#    random.seed(9)
+    gui = MinesweeperGUI(debug_mode=True, difficulty='expert')
     example = Example(gui)
     example_thread = Thread(target=example.run)
     example_thread.start()
