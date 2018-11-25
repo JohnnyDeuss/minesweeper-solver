@@ -6,10 +6,7 @@ from scipy.signal import convolve2d
 
 
 def dilate(bool_ar):
-    """ Perform binary dilation with a structuring element with connectivity 2. Essentially what this kind of
-        dilation does is return True for any square that has a True anywhere in the 8 squares surrounding it or if
-        it itself is True.
-    """
+    """ Perform binary dilation with a structuring element with connectivity 2. """
     return binary_dilation(bool_ar, structure=generate_binary_structure(2, 2))
 
 
@@ -20,10 +17,10 @@ def neighbors(bool_ar):
 
 def neighbors_xy(x, y, shape):
     """ Return a binary mask marking all squares that neighbor the square at (x, y). """
-    return neighbors(mask_square(x, y, shape))
+    return neighbors(mask_xy(x, y, shape))
 
 
-def mask_square(x, y, shape):
+def mask_xy(x, y, shape):
     """ Create a binary mask that marks only the square at (x, y). """
     mask = np.zeros(shape, dtype=bool)
     mask[y, x] = True

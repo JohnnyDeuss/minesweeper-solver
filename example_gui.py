@@ -5,6 +5,8 @@
      1614353606 - Top-left unconstrained may have as many mines as squares.
     -1365615019 - Top-right corner where there are no unconstrained and many constrained, highlightss weight and
                   constraint issues.
+     1791206719 - Three disconnected areas with non-merged neighboring components
+     -436764911 - Top right corner that's cut off by mines.
 """
 from time import sleep
 from threading import Thread
