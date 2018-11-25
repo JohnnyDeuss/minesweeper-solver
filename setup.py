@@ -13,7 +13,7 @@ setup(name='minesweeper_solver',
           'GUI': ['minesweeper']
       },
       dependency_links=[
-          'git+ssh://git@github.com/JohnnyDeuss/minesweeper#egg=minesweeper',
+          'git+ssh://git@github.com/JohnnyDeuss/minesweeper.git#egg=minesweeper-1.0',
       ],
       packages=find_packages()
     )
