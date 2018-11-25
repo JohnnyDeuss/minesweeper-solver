@@ -18,7 +18,7 @@ from scipy.signal import convolve2d
 
 from minesweeper.gui import MinesweeperGUI
 from solver import Solver
-from solver.policies import nearest_policy
+from solver.policies import corner_then_edge2_policy
 
 
 class Example(QObject):
@@ -62,7 +62,7 @@ class Example(QObject):
                 if best_prob != 0:
                     verify(game, prob)
                     expected_win *= (1-best_prob)
-                    x, y = nearest_policy(prob)
+                    x, y = corner_then_edge2_policy(prob)
                     print('GUESS ({:.4%}) ({}, {})'.format(best_prob, x, y))
                     gui.left_click_action(x, y)
                 else:

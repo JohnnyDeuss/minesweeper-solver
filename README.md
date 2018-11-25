@@ -7,4 +7,4 @@ to constrain the value of already constrained squares. The method for picking wh
 and finding a near-optimal policy requires machine learning. Some simple policies are given in `/solver/policies`.
 
 
-![An example of the solver doing its thing.](/example.gif)
+![An example of the solver doing its thing.](/examples/example.gif)
