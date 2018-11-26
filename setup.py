@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(name='minesweeper_solver',
       version='1.0',
-      description='Minesweeper solver',
+      description='A probabilistic minesweeper solver',
       author='Johnny Deuss',
       author_email='johnnydeuss@gmail.com',
       url='https://github.com/JohnnyDeuss/minesweeper-solver',

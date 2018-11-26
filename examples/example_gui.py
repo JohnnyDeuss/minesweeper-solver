@@ -17,8 +17,8 @@ import numpy as np
 from scipy.signal import convolve2d
 
 from minesweeper.gui import MinesweeperGUI
-from solver import Solver
-from solver.policies import corner_then_edge2_policy
+from minesweeper_solver import Solver
+from minesweeper_solver.policies import corner_then_edge2_policy
 
 
 class Example(QObject):

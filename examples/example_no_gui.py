@@ -4,8 +4,8 @@
 import numpy as np
 
 from minesweeper import Minesweeper
-from solver import Solver
-from solver.policies import corner_then_edge2_policy
+from minesweeper_solver import Solver
+from minesweeper_solver.policies import corner_then_edge2_policy
 
 
 game = Minesweeper(difficulty='intermediate')
