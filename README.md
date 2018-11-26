@@ -11,7 +11,7 @@ and finding a near-optimal policy requires machine learning. Some simple policie
 The solver can be installed directly from GitHub
 using the following command:
 
-`pip3 install git+https://github.com/JohnnyDeuss/minesweeper_solver#egg=minesweeper_solver`
+`pip3 install git+https://github.com/JohnnyDeuss/minesweeper-solver#egg=minesweeper_solver`
 
 ## Usage
 A couple of examples of the solver being used to solve minesweeper games are given in the `/examples` directory.
