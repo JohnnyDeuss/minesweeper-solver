@@ -1,4 +1,4 @@
-""" A package with common functions useful to working with minesweeper games. """
+""" A module with common functions for working with minesweeper games. """
 import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage import generate_binary_structure
