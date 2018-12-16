@@ -246,9 +246,6 @@ class Solver:
                     total_prob += weight * comb_prob
             # Now normalize the probabilities by dividing out the total weight.
             total_prob /= total_weight
-            # Remember the certain values.
-            certain_mask = solution_mask & ((total_prob == 0) | (total_prob == 1))
-            self.known[certain_mask] = total_prob[certain_mask]
             # Add result to the prob array.
             prob[solution_mask] = total_prob[solution_mask]
         # If there are any unconstrained mines...
@@ -256,6 +253,9 @@ class Solver:
             m_known = self.known_mine_count()
             # The amount of remaining mines is distributed evenly over the unconstrained squares.
             prob[unconstrained_squares] = (self._total_mines - m_known - prob[~np.isnan(prob) & (prob != 1)].sum()) / n
+        # Remember the certain values.
+        certain_mask = np.isnan(self.known) & ((prob == 0) | (prob == 1))
+        self.known[certain_mask] = prob[certain_mask]
         return prob
 
     def _count_models(self, solution):
@@ -312,7 +312,7 @@ class Solver:
                     labeled[labeled > j] -= 1
                     num_components -= 1
                     # The mask that was merged in may overlap with already checked masks, so loop with the same i.
-                    i -= 1
+                    i -= 1  # -1, so the outer while will iterate it back to the same i after we break.
                     break
                 j += 1
             i += 1

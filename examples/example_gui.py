@@ -7,6 +7,8 @@
                   constraint issues.
      1791206719 - Three disconnected areas with non-merged neighboring components
      -436764911 - Top right corner that's cut off by mines.
+     1396764919 - A non-boundary square is known to be a mine due to it being there being exactly one mine and one
+                  square outside of the boundary.
 """
 from time import sleep
 from threading import Thread
