@@ -252,7 +252,7 @@ class Solver:
         if n > 0:
             m_known = self.known_mine_count()
             # The amount of remaining mines is distributed evenly over the unconstrained squares.
-            prob[unconstrained_squares] = (self._total_mines - m_known - prob[~np.isnan(prob) & (prob != 1)].sum()) / n
+            prob[unconstrained_squares] = (self._total_mines - m_known - prob[~np.isnan(prob) & np.isnan(self.known)].sum()) / n
         # Remember the certain values.
         certain_mask = np.isnan(self.known) & ((prob == 0) | (prob == 1))
         self.known[certain_mask] = prob[certain_mask]
