@@ -2,7 +2,7 @@
     This solver is correct about all minesweeper games that uniformly distribute their mines. A minesweeper game that
     does things like trying to generate pattern with less guessing will likely have different mine distributions and
     the solver will return incorrect probabilities for uncertain squares, but will still know mines that are certain.
-    An example of mines no being distributed uniformly is Windows 98's version of the 'no mine on first click' option,
+    An example of mines not being distributed uniformly is Windows 98's version of the 'no mine on first click' option,
     which moves the mine under the mouse.
     
     The solver works in several steps. The problem can be solved entirely with constraint programming (CP) and math, but
