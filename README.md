@@ -35,13 +35,15 @@ approach is run first because it efficiently deals with trivial cases, reducing
 the cost of running the second approach, not only by solving trivial squares but
 also by potentially breaking up the boundary into disconnected components.
 
-The second approach is more expensive and can computes the exact probability of
+The second approach is more expensive and can compute the exact probability of
 all unknown squares in the boundary. The steps this approach takes are as
 follows:
 - Divide the unknown boundary into disconnected components.
 - Divide the components into areas, each area is a group of squares to which the
   same constraints apply, i.e. two squares that are both next to only the same 1
-  and 3. 
+  and 3. Thinking in constrained areas rather than individual cells allows for
+  massive performance improvements in the CLP step, because we don't care about
+  the exact assignment of mines, just about the amount in an area.
 - Use constraint programming to find all valid models assigning a number of mines
   to each area.
 - Combine model counts and probabilities of each area into aggregated counts and
@@ -49,5 +51,5 @@ follows:
 - Combine the components and again aggregate the model counts and probabilities,
   then weigh the probabilities by the model counts.
   
-For more detail, please reference the code and the more elaborate explanationin
+For more detail, please reference the code and the more elaborate explanation in
 the comments of `minesweeper_solver/solver.py`.
